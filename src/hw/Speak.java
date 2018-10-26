@@ -19,15 +19,19 @@ public class Speak {
 	private String host;
 	private int chunk_size;
 	private double loss_rate;
+	private boolean repeat;
+	private boolean backup;
 	private int port = 20443;
 	static DatagramSocket socket = null;
 	static InetAddress IPAddress = null;
 	
 	// constructor
-	public Speak(String host, int chunk_size, double loss_rate) {
+	public Speak(String host, int chunk_size, double loss_rate, boolean repeat, boolean backup) {
 		this.host = host;
 		this.chunk_size = chunk_size;
 		this.loss_rate = loss_rate;
+		this.repeat = repeat;
+		this.backup = backup;
 	}
 	
 	public String get_host() {
@@ -46,18 +50,26 @@ public class Speak {
 		return loss_rate;
 	}
 	
+	public boolean getRepeat() {
+		return repeat;
+	}
+	
+	public boolean getBackup() {
+		return backup;
+	}
+	
 	public static void main(String args[]) {
 		// args[0] = host name
 		// args[1] = chunk size
 		// args[2] = loss rate
 		
-		Speak speak = new Speak(args[0], Integer.parseInt(args[1]), Double.parseDouble(args[2]));
+		Speak speak = new Speak("localhost", 40, 0, false, true);
 		MyAudio myAudio = new MyAudio();
 		
 		// set up the socket
 		try {
 			socket = new DatagramSocket(speak.get_port());
-			socket.setSoTimeout(50);
+			socket.setSoTimeout(200);
 		} catch (SocketException e2) {
 			e2.printStackTrace();
 		}
@@ -123,6 +135,7 @@ public class Speak {
 						curr = receivePacket.getData();
 					} catch (IOException e) {
 						// lost the packet
+						e.printStackTrace();
 						curr = null;
 					}
 					// play the audio
@@ -131,19 +144,22 @@ public class Speak {
 						byte[] data = Arrays.copyOfRange(prev, prev.length/2, prev.length);
 						myAudio.play(data);
 						last_played = prev;
-						prev = curr;
 					} else if (curr != null) {
 						// play the backup on this current packet
-						byte[] data = Arrays.copyOfRange(curr, 0, curr.length/2);
-						myAudio.play(data);
-						last_played = curr;
-						prev = curr;
+						if (speak.getBackup()) {
+							byte[] data = Arrays.copyOfRange(curr, 0, curr.length/2);
+							myAudio.play(data);
+							last_played = curr;
+						}
 					} else if (last_played != null) {
-						byte[] data = Arrays.copyOfRange(last_played, last_played.length/2, last_played.length);
-						myAudio.play(data);
-						prev = curr;
+						// repeat the last played packet
+						if (speak.getRepeat()) {
+							byte[] data = Arrays.copyOfRange(last_played, last_played.length/2, last_played.length);
+							myAudio.play(data);
+						}
 					}
 					// otherwise, silence
+					prev = curr;
 				}
 			}
 		};
